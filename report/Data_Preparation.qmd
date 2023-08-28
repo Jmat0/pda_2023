@@ -1,0 +1,231 @@
+```{r,message = FALSE, echo = FALSE}
+source(here::here("scripts/setup.R"))
+```
+
+```{r, message=FALSE, warning=FALSE}
+bank <- read.csv2(here("Data/GermanCredit.csv"))  # We need to use "csv2" because the variables are separated by semicolons
+```
+
+# 2. Data Preparation
+
+We start by removing the **Observation number** for each client, as it is not relevant for our analysis.
+
+```{r, echo = TRUE}
+bank <- bank[,-1]
+# Displaying first 5 rows in a table
+kable((bank[1:5,]),"html") %>%
+  kable_styling(full_width = F,  html_font = "Arial")
+```
+
+We remove the rows linked to the errors in variables *Male Single* and *Guarantor*.
+
+```{r, echo = TRUE}
+# remove row with 2 in MALE_SINGLE column
+bank <- bank %>% filter(MALE_SINGLE != 2)
+
+# remove row with -1 in Guarantor column
+bank <- bank%>% filter(GUARANTOR != -1)
+```
+
+We convert the categorical variables to **factors**.
+
+```{r}
+# We select columns that we will use to convert the integer to factor
+#my_cols <- c(5:10, 15:19, 21:22, 24:26, 30:32)
+my_cols <- c(1, 3:9, 11, 12, 14:21, 23:25, 27, 29:31)
+# loop over each column and convert to factor in the bank dataset
+for (i in seq_along(my_cols)) {
+  bank[[my_cols[i]]] <- factor(bank[[my_cols[i]]])
+}
+```
+
+### Removing Missing Values from Age
+
+```{r, echo = TRUE}
+bank <- na.omit(bank)
+
+introduce(bank) %>% 
+  pander::pander(options = list('style' = 'grid', 'split.words' = FALSE, 'split.cells' = TRUE))
+
+```
+
+There are now 984 **observations** in our data frame.
+
+### One-hot encoding
+
+In order to use our categorical variables for our machine learning models, we need to convert them using one-hot encoding. It will make them all **binary**. We will also convert our target variable, *RESPONSE*, to a **factor**. This ensures that the machine learning algorithms can effectively learn and make accurate predictions based on the categorical nature of the target variable.
+
+```{r, echo = TRUE}
+# Select the categorical variables to encode
+cat_vars <- c("CHK_ACCT","HISTORY","SAV_ACCT", "EMPLOYMENT", "GUARANTOR", "PRESENT_RESIDENT", "JOB")
+
+# Perform one-hot encoding for each variable using lapply() and model.matrix()
+encoded_vars <- lapply(bank[cat_vars], function(x) model.matrix(~x-1, data = bank))
+
+# Rename the encoded columns with more informative names
+for (i in seq_along(cat_vars)) {
+  var_name <- cat_vars[i]
+  var_levels <- levels(bank[[var_name]])
+  col_names <- paste0(var_name, "_", var_levels)
+  colnames(encoded_vars[[i]]) <- col_names
+}
+
+# Combine the encoded variables into a single data frame using cbind()
+bank <- cbind(bank, do.call(cbind, encoded_vars))
+
+# Remove the original columns
+bank <- bank %>% select(-c("CHK_ACCT","HISTORY","SAV_ACCT", "EMPLOYMENT", "GUARANTOR", "PRESENT_RESIDENT","JOB"))
+
+# Convert the new columns to factors
+my_cols <- c(25:53)
+# loop over each column and convert to factor in the bank dataset
+for (i in seq_along(my_cols)) {
+  bank[[my_cols[i]]] <- factor(bank[[my_cols[i]]])
+}
+# View the encoded dataset
+
+# Create a table for head(bank)
+table_head <- kable(head(bank), format = "html", row.names = FALSE) %>%
+  kable_styling(full_width = FALSE, html_font = "Arial")
+
+# Print the table
+table_head
+
+# Converting "RESPONSE" to a factor 
+bank$RESPONSE <- factor(bank$RESPONSE, levels = c(0, 1))
+
+```
+
+### Create New Variable Female
+
+```{r, echo = TRUE}
+bank <- bank %>%
+  add_column(Female = 0) %>%
+  mutate(Female = ifelse(bank[, 10] == 0 & bank[, 11] == 0 & bank[, 12] == 0, 1, 0))
+
+# Convert it to factor
+bank$Female <- factor(bank$Female)
+
+# Displaying first 5 rows in a table
+kable((bank[1:5,]),"html", row.names = 0) %>%
+  kable_styling(full_width = F, html_font = "Arial")
+```
+
+### Standardize Numerical Variables
+
+On average, the values of *Amount* are way larger than the *Age* or *Duration* variables. We need to standardize them in order to have a coherent **scale**.
+
+```{r,echo = TRUE}
+# We first need to remove negative values in AMOUNT
+bank <- subset(bank, DURATION >= 0)
+# Remove outliers in AGE (only one observation)
+bank <- subset(bank, AGE <= 100)
+```
+
+```{r}
+#bank$AMOUNT <- scale(bank$AMOUNT)
+#bank$AGE <- scale(bank$AGE)
+#bank$DURATION <- scale(bank$DURATION)
+#bank$INSTALL_RATE <- scale(bank$INSTALL_RATE)
+#bank$NUM_CREDITS <- scale(bank$NUM_CREDITS)
+#bank$NUM_DEPENDENTS <- scale(bank$NUM_DEPENDENTS)
+```
+
+```{r, warning=F}
+library(dplyr)
+
+# Select the variables to be scaled
+vars_to_scale <- c("AMOUNT", "AGE", "DURATION", "INSTALL_RATE", "NUM_CREDITS", "NUM_DEPENDENTS")
+
+# Apply min-max scaling using mutate_at()
+bank <- bank %>%
+  mutate_at(vars(vars_to_scale), ~ (.-min(.)) / (max(.)-min(.)))
+```
+
+We have performed the main transformations to our data set. We are going to simplify it even further by regrouping variables together and removing some. However, we are still going to keep the original **bank** data set as is, so that we can compare it to our simplified version. This new version will be called **bank_grouped**.
+
+### Regroup Variables
+
+We do the following operations:
+
+-   Merge Education and Retraining
+
+-   Merge Material variables
+
+-   Convert them to factors
+
+```{r,  echo = TRUE}
+# Create new data set
+bank_grouped <- bank
+
+# Merge Education and Retraining
+bank_grouped$Education_Purpose <- ifelse(bank_grouped$EDUCATION == 1 | bank_grouped$RETRAINING == 1, 1, 0)
+
+# Remove EDUCATION and RETRAINING columns
+bank_grouped <- subset(bank_grouped, select = -c(EDUCATION, RETRAINING))
+
+# Merge Material variables 
+bank_grouped$Material_Purpose <- ifelse(bank_grouped$NEW_CAR == 1 | bank_grouped$USED_CAR == 1 | bank_grouped$FURNITURE== 1 | bank_grouped$RADIO.TV == 1, 1, 0)
+
+# Remove material purposes variables
+bank_grouped <- subset(bank_grouped, select = -c(NEW_CAR, USED_CAR, FURNITURE, RADIO.TV)) 
+
+# Convert the new variables to factors
+bank_grouped$Education_Purpose <- factor(bank_grouped$Education_Purpose)
+bank_grouped$Material_Purpose <- factor(bank_grouped$Material_Purpose)
+```
+
+*Present_resident* does not seem to be useful at all so we are going to remove it. We will group all the residence variables: *Real_estate*, *Prop_unkn_none*, *Rent*, *Own_res*. If Real_estate == 0 and Rent == 1 and own_res == 0 \--\> rents (2) IF Real_estate == 1 and Rent == 1 and own_res == 0 \--\> rents_with_prop (1) If real_estate ==1 and Rent == 0 and own_res == 1 \--\> no_rent (0)
+
+As we know have a variable *Female*, we are going to remove all the *Male* variable. It will allow us to have a **binary** variable which is 1 if the applicant is a woman, and 0 if it is a man.
+
+```{r}
+bank_grouped <- subset(bank_grouped, select = -c(MALE_DIV, MALE_SINGLE, MALE_MAR_or_WID))  
+```
+
+```{r}
+#Old code to merge Male variables
+# Create Variable Male
+#bank_grouped <- bank_grouped %>%
+#  add_column(Male = 0) %>%
+#  mutate(Male = ifelse(bank_grouped[, 15] == 1 | bank_grouped[, 16] == 1 | bank_grouped[, 17] == 1, #1, 0))
+
+# Remove older variables
+#bank_grouped <- subset(bank_grouped, select = -c(MALE_DIV, MALE_SINGLE, MALE_MAR_or_WID))
+
+# Convert new variable
+#bank_grouped$Male <- factor(bank_grouped$Male)
+```
+
+The last step we are doing is to transmute the values of 0 & 1's from the *Response* variable. This way, people who are at risk of bad credit are equal to 1, and the good credit to zero. It will help make sense for the interpretation of our models (focus on *Sensitivity* instead of *Specificity*). However, despite these changes, the results from our correlation matrices do not clearly translate to our metric of Sensitivity. Instead, it is called *negative predicted values*. From now on, we will still talk about *sensitivity*, as it represents the same thing.
+
+```{r}
+bank$RESPONSE <- ifelse(bank$RESPONSE == 0, 1, 0)
+bank_grouped$RESPONSE <- ifelse(bank_grouped$RESPONSE == 0, 1, 0)
+
+# Convert to factor
+bank$RESPONSE <- factor(bank$RESPONSE)
+bank_grouped$RESPONSE <- factor(bank_grouped$RESPONSE)
+```
+
+We now have our 2 data sets ready. Our **bank** data frame has 54 variables, and **bank_grouped** 47. We can move on to the Modeling phase.
+
+-   **Bank data frame**
+
+```{r}
+# Displaying first 5 rows in a table
+kable((bank[1:5,]),"html", row.names = 0) %>%
+  kable_styling(full_width = F, html_font = "Arial")
+
+```
+
+------------------------------------------------------------------------
+
+-   **Bank_grouped data frame**
+
+```{r}
+# Displaying first 5 rows in a table
+kable((bank_grouped[1:5,]),"html", row.names = 0) %>%
+  kable_styling(full_width = F, html_font = "Arial")
+
+```

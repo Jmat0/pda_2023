@@ -1,0 +1,51 @@
+---
+title: "Business Understanding"
+format: html
+editor: visual
+---
+
+## Creditworthiness: Accurate detection for high-risk credit applicants.
+
+As a bank responsible for managing the accounts of multiple clients, we must exercise caution when extending credit to certain individuals. An applicant defaulting on his debt represents risks that create additional costs for the institution.
+
+**How can we ensure that credit applicants will repay their debts reliably and on time ?**
+
+Our goals are:
+
+-   to provide actionable insights for informed decision making
+
+<!-- -->
+
+-   understand the key elements influencing the credit risks (highly significant features)
+
+-   Correctly classify the clients that will default
+
+## Introduction of the database
+
+Our data set contains information of 1000 loan applicants, which encompasses 31 variables, providing us with valuable information and insights into their financial profiles and creditworthiness. For example, we have the following variables:
+
+-   *History*: credit history of the client.
+
+-   *New_car*: purpose of credit
+
+-   *Employment*: Present employment of the client (number of years)
+
+## Methodology
+
+We will follow the **CRISP-DM** model for the project structure.
+
+1.  Data understanding
+
+First of all, we will conduct an exploratory data analysis in order to make general inferences. This step consist in exploring the data through graphical visualization such as mosaic plots, histograms and density plots. Then we will identify irregularities such as missing values, outliers, or multicollinearity.
+
+2.  Data Preparation
+
+Once identified, we will address these issues by normalizing the numerical variables, removing missing values, using one-hot encoding method, creating and grouping variables together, to create a new data set named bank_grouped.
+
+3.  Data Modeling
+
+After the cleaning, we will proceed to the analysis by building various models. To find the most significant features for assessing credit risk we will apply the following models: **Logistic Regression** (adding backward selection), **Random Forest**, **General Linear models** (GLMnet) and **Linear Discriminant Analysis** (LDA). Although these models are used for feature selection, they will be used in the next section as well, consisting to classify correctly the default clients. To identify high-risk credit applicants, we will use the following models : **Classification Tree** (and pruned tree), **Support Vector Machine** (Radial basis kernel vs Linear kernel) and **Neural Network**. In order to find the best model, we will tune the hyper-parameters, by applying cross-validation and down-sampling. Then we will compare the results obtained. Their performance will be assessed exclusively on their sensitivity level through their respective confusion matrix.
+
+4.  Recommendations and limitations
+
+Once we have identified the best model to predict new high-risk credit applicants, we will provide recommendations concerning its use for the bank. Finally, we will introduce the limitations of the project.

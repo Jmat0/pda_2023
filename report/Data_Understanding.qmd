@@ -1,0 +1,327 @@
+
+```{r, message=FALSE, warning=FALSE, echo = FALSE}
+# Collect Initial Data: load packages and dataset
+options(repos = "http://cran.rstudio.com")
+packages <- c("tidyverse", "DataExplorer", "here", "DT", "corrplot", "dplyr", "ggplot2", "Hmisc", "mosaicplot", "tidyquant", "ggtheme", "RColorBrewer", "psych", "GGally", "corrr", "ggcorrplot", "kableExtra", "inspectdf", "skimr", "plotly", "heatmaply", "ggcorrplot", "explore","mltools", "data.table", "ggmosaic", "vcd", "moments", "rpart.plot", "pander", "caret")
+loaded <- sapply(packages, require, character.only = TRUE)
+if (any(!loaded)) { # ! used as a negation. If there is a library which is not loaded (false), then install.package
+  install.packages(packages[!loaded])
+}
+bank <- read.csv2(here("Data/GermanCredit.csv"))  # We need to use "csv2" because the variables are separated by semicolons
+```
+
+# 1. Data understanding
+
+## 1.1 Describe data
+
+We start by looking at the main structure of our database by using the: **datatable, introduce** and **summary** functions. In our data set, there are 1000 observations, with each row representing a distinct client.
+
+-   From the 32 variables, we only have integer values. It makes sense for variables such as *Amount*, *Duration* or *Age*, however, not for most of the others. For example, if someone is single or not, should be a binary response; yes/no represented by a 1/0. We will solve these data formatting errors by converting them to factors and make sure that the variables are not mistaken as continuous in the **Data Preparation** section.
+
+-   We can state that the *Response* variable is positively skewed, with a mean of 0.7 and a mode of 1. This suggests that there are more clients with good credit than those who default.
+
+-   Additionally, we know that the average *Age* of the clients is 35 years. But, there is one client with an age of 151 years, which is the unique outlier. Upon closer inspection, we have determined that this observation is likely a typo error, as there is nothing unusual about this client that would explain such an extreme age. Therefore, we will remove this observation during the **Data preparation** stage.
+
+-   Besides, the average client demands a credit of 3271DM. The *Amount* variable is very wide, ranging from 250 to 18'424 DM. As the average is 3271DM , we will expect to find some outliers.
+
+-   Furthermore, we noticed that the data set also includes female clients. They are represented when the variables *male_div*, *male_single* and *male_mar_or_wid* are equal to 0. In order to account for the female clients in the analysis, a new column named *Female* will be created in the **Data preparation** stage.
+
+-   From the variables describing the purpose of the credit, we see *Radio.TV* and *New_Car* as the most relevant. They have a mean of respectively 28% and 23.4%. On the other end, clients take less credit for *Education* and *Retraining* (5% and 9.7%).
+
+-   We could hypothesize that the majority of customers are out of school and working. This is emphasized by the fact that the mean for *Job* is 2, meaning that the person is a skilled employee.
+
+-   There are some strange values that need to be taken care of:
+
+    -   *Duration* has a min value of -6, which doesn't make sense
+
+    -   Same thing for *Guarantor* who has a min value of -1
+
+    -   The maximum value of Age is of 151. Using the **plot_missing** function, we notice that there are 1.4% missing values in the *age* category, which correspond to 14 observations.
+
+```{r}
+summary(bank) %>% 
+  kbl(caption = "Summary") %>%
+  kable_classic(full_width = F, html_font = "Arial") %>% 
+  kable_paper()
+datatable(bank)
+introduce(bank) %>% 
+  pander::pander(options = list('style' = 'grid', 'split.words' = FALSE, 'split.cells' = TRUE))
+```
+
+**Checking outliers for the variable AGE**
+
+```{r}
+library(knitr)
+library(kableExtra)
+filtered_data <- bank %>% filter(AGE > 75)
+# Transpose the table to have variables in rows
+tbl_transposed <- t(filtered_data)
+
+dt <- kbl(tbl_transposed) %>% kable_classic(full_width = F, html_font = "Arial")
+dt
+plot_missing(bank, title = "Missing values", ggtheme=theme_gray())
+```
+
+## 1.2 Explore Data
+
+### Histograms
+
+Histograms allows us to collect information about numerical variables. *Age* and *Amount* are right-skewed, implying that they do not follow a Normal distribution. This could mean the presence of outliers. *Duration* follows a random distribution.
+
+```{r, warning=FALSE, message=FALSE}
+# Create a vector of continuous variables and make their histograms 
+library(dplyr)
+library(ggplot2)
+
+vars <- c("AGE", "DURATION", "AMOUNT")
+data_long <- bank %>%
+  select(all_of(vars)) %>%
+  tidyr::gather(key = "variable", value = "value")
+
+ggplot(data_long, aes(x = value, fill = variable)) +
+  geom_histogram() +
+  facet_wrap(~variable, scales = "free") +
+  labs(title = "Histogram of Age, Duration and Amount",
+       x = "Values",
+       y = "Count") +
+  scale_fill_manual(values = c("lightblue", "lightgreen", "orange"))
+
+ 
+bank %>% 
+    count(EMPLOYMENT) %>%
+    ungroup() %>%
+    mutate(EMPLOYMENT.pct = prop.table(n) * 100) %>%
+    ggplot(aes(x = EMPLOYMENT, y = EMPLOYMENT.pct, fill = EMPLOYMENT)) + ylim(0, 100) + geom_bar(stat = "identity",
+    position = "dodge") + geom_text(aes(y = EMPLOYMENT.pct + 2, label = paste0(round(EMPLOYMENT.pct,
+    2), "%")), position = position_dodge(width = 0.9), size = 3) + theme_classic() + xlab("Employement") + ylab("Proportion")
+# We know that only 6.2% of clients are unemployed, for example. 
+
+  
+bank %>% 
+  count(RESPONSE) %>%
+  ungroup() %>%
+  mutate(RESPONSE.pct = prop.table(n) * 100) %>%
+  ggplot(aes(x = RESPONSE, y = RESPONSE.pct, fill = RESPONSE)) +
+  ylim(0, 100) +
+  geom_bar(stat = "identity", position = "dodge") +
+  geom_text(aes(y = RESPONSE.pct + 2, label = paste0(round(RESPONSE.pct, 2), "%")),
+            position = position_dodge(width = 0.9), size = 3) +
+  theme_classic() +
+  xlab("Credit Score") + ylab("Proportion") +
+  scale_x_continuous(breaks = c(0, 1), labels = c("0", "1"))
+
+```
+
+### NA Values
+
+As we've seen, the missing values appear only in the *Age* variable. We can have a closer look at them. We don't really see a pattern which would explain why we have NA values for *Age*. This could mean that they were simply not correctly recorded. Since they represent only 0.014 % of our data, we will delete them in order to have a clean data frame.
+
+```{r}
+library(knitr)
+
+output <- bank %>%
+  select(everything()) %>%
+  filter(!complete.cases(.))
+
+correlation <- cor(is.na(bank$AGE), bank[, -which(names(bank) == "AGE")])
+
+
+cor <- kbl(correlation) %>% kable_classic(full_width = F, html_font = "Arial")
+out<- kbl(output) %>% kable_classic(full_width = F, html_font = "Arial")
+
+cor
+out
+
+
+```
+
+### Density plots
+
+This plot shows a collection of density plots for the numerical variables in the dataset. It can be used to examine the distribution shape and identify any potential outliers. It's worth noting that categorical variables with more than two factors will also be displayed in this plot. However, binary variables, *Guarantor* and *male_single*, are displayed here despite having only two possible values. In our dataset, these variables have an additional factor (-1 and 2, respectively). Furthermore, the *amount* and *age* variables appear to have a skewed distribution that leans towards the right. This could be attributed to the presence of outliers in the dataset.
+
+```{r}
+library(DataExplorer)
+update_geom_defaults("density", list(fill = "blue", alpha = 0.5))
+plot_density(bank[,-1])
+```
+
+### Mosaic plots
+
+Now, we use mosaic plots for displaying the distribution of 3 categorical variables which are : *history, chk_acct,* and *sav_acct* and their relationships with the *response* variable. It can also help identify unusual patterns and are a useful way to visualize categorical data.
+
+```{r}
+# create the mosaic plot
+library(vcd)
+
+mosaic(~HISTORY + RESPONSE, data=bank, shade=TRUE)
+
+mosaic(~CHK_ACCT + RESPONSE, data=bank, shade=TRUE)
+
+mosaic(~SAV_ACCT + RESPONSE, data = bank, shade = TRUE)
+
+```
+
+### Outliers
+
+There are many ways to check for outliers. The most popular is through **boxplots**, because outliers are represented as individual points that fall outside the whiskers. We have plotted the boxplots of the continuous variables. Each variable has outliers and we will do something about it (either transform the data or remove them). For example, as mentioned above, *Age* contains an observation (a client) that is 151 years old. As a matter of fact, it seems that each of these variables have a unique point that is equally distant from the others.
+
+It appears that a unique observed value of *Duration* is unexpectedly negative, which may require further investigation and analysis to determine the cause and implications of this observation. This suggests that the Client 103 has a negative month duration for their credit. Let's explore the client characteristics to check if it's a typing error. At a first glance, there are no indications pointing out that the Client has an abnormal profile. In order to validate our hypothesis that it's a typing error, we are going to compare the anomaly Client with other individuals that share the same characteristics: 6 months credit duration, purpose of credit: TV, etc.. By comparing the six individuals in *similar_clients* we deduce that it's purely random.
+
+Finally, we examine that the data set does not include duplicated entries using **distinct** function in the **Dplyr** package. We haven't found any duplicated rows in the data set.
+
+```{r}
+par(mfrow = c(1, 3))
+outlier_age <- subset(bank, AGE == 151) # correspond to  client number 73  
+outlier_duration <- subset(bank, DURATION == 72) # correspond to client 678
+outlier_amount <- subset(bank, AMOUNT == 18424) # correspond to client 916
+outlier_duration <- subset(bank, DURATION == -6) # correspond to client 103 
+
+# Add color to outliers
+boxplot(bank$AGE, main = "Age", col = "skyblue")
+points(outlier_age$AGE, col = "red", pch = 19)
+boxplot(bank$DURATION, main = "Duration", col = "lightgreen")
+points(outlier_duration$DURATION, col = "red", pch = 19)
+boxplot(bank$AMOUNT, main = "Amount", col = "pink")
+points(outlier_amount$AMOUNT, col = "red", pch = 19)
+
+```
+
+```{r}
+# Check for duplicates
+duplicated_rows <- distinct(bank)
+# compare individuals having same characteristics as client 103 to confirm hypothesis 
+similar_client <- bank %>% filter(DURATION == -6 | DURATION == 6, RADIO.TV == 1, AMOUNT > 500 & AMOUNT < 1000)
+
+```
+
+### Correlations
+
+Using the **heatmaply** package, we can quickly glance at the correlations between our variables. We first create a new data frame without any NA values. Then we normalize our dataset. Since *Amount* can be counted in thousands of DM, it is important to have a common scale between all variables. We use the min-max scale in order to have everything between 0 and 1.
+
+```{r, warning=F}
+df <- read.csv2(here("Data/GermanCredit.csv"))
+# we need to remove the missing values
+df_no_na <- na.omit(df)
+# and normalize the data
+df_no_na_norm <- normalize(df_no_na)
+
+library(heatmaply)
+heatmaply_cor(
+  cor(df_no_na_norm),
+  xlab = "Features", 
+  ylab = "Features",
+  k_col = 2, 
+  k_row = 2,
+  cellwidtrh = 40
+)
+```
+
+Most variables in the dataset have weak correlations with each other. However, there are some strong correlations that are not surprising:
+
+-   The variable *Own_Res* is negatively correlated with Rent and *Prop_Unkn_None*, indicating that clients who own a residence tend not to rent another place or have unknown or no property ownership status. The correlation between *Own_Res* and *Prop_Unkn_None* is around 50%, suggesting that the ownership status of many clients is unknown. Otherwise, we would see an almost perfect negative correlation. The purpose of credits variables are all negatively correlated, which is reasonable as clients typically borrow money for only one purpose.
+
+-   Regarding the feature of interest, *Response*, we can see that it has a strong positive correlation with *Chk_Acct* (35%) and a moderate positive correlation with *Sav_Acct* (17.5%). Although these correlations are high, it appears that most of the other variables also influence the decision of the Response variable. Further analysis of significance will shed more light on this.
+
+## 1.3 Explore Variables
+
+### Amount
+
+To explore the variables, we analyze the relationship between the loan amount and the likelihood of defaulting on the loan. From the graph, we can observe that the percentage of defaults increases as the loan amount increases. For example, the segment with loan amounts between 12,500DM and 20,000DM has the highest percentage of defaults. On the other hand, the segment with loan amounts between 1,000DM and 5,000DM has the lowest percentage of defaults, which is around 30%.
+
+```{r}
+# Create segments of 1000 using the cut function
+bank$segment <- cut(bank$AMOUNT, breaks = seq(0, 19000, by = 1000))
+
+bank$DEFAULT <- ifelse(bank$RESPONSE == 0, 1, 0)
+result <- bank %>% 
+  group_by(segment) %>% 
+  summarise(default_percent = mean(DEFAULT) * 100)
+
+# Round the default percentage to integer values
+result$default_percent <- round(result$default_percent)
+
+# Create a bar chart using ggplot2
+ggplot(result, aes(x = as.numeric(segment), y = default_percent)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  scale_x_continuous(labels = function(x) format(x*1000, scientific = FALSE)) +
+  xlab("AMOUNT Segments") +
+  ylab("Percentage of Defaults") +
+  ggtitle("Percentage of Defaults by Amount Segments of 1000DM") +
+  geom_text(aes(label = paste(round(default_percent, 2), "%"), y = default_percent), vjust = -0.5, size = 2.5)
+
+```
+
+The following barplot provides a quick and easy way to compare the relative frequency of different loan purposes. We can see that the most common purpose for a loan in this sample was for *radios/TVs*, followed by *new cars* and *furniture*. *Used* *cars*, *education*, and *retraining* were less common loan purposes.
+
+```{r}
+library(ggplot2)
+
+# select the columns of interest and create a data frame
+df <- bank[, c("NEW_CAR", "USED_CAR", "FURNITURE", "RADIO.TV", "EDUCATION", "RETRAINING")]
+
+# define colors and names for each variable
+colors <- c("lightblue", "steelblue", "lightgreen", "orange", "green", "lightpink")
+var_names <- c("New Car", "Used Car", "Furniture", "Radio/TV", "Education", "Retraining")
+
+# calculate the percentage for each variable
+percentages <- colMeans(df) * 100
+
+# create a data frame with the variable names and percentages
+data_plot <- data.frame(variable = var_names, percentage = percentages)
+
+# create the plot using ggplot2
+ggplot(data_plot, aes(x = percentage, y = variable, fill = variable)) +
+  geom_bar(stat = "identity", position = "identity", width = 0.7) +
+  scale_fill_manual(values = colors) +
+  labs(title = "Percentage of credits for each purpose",
+       x = "Percentage",
+       y = "Purpose") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.title.y = element_blank(),
+        legend.position = "right",
+        legend.title = element_blank(),
+        legend.text = element_text(family = "Arial"),
+        legend.box.background = element_blank(),
+        legend.key.width = unit(0.7, "cm"))
+
+
+```
+
+### Employment
+
+To better understand the profil of loaners, we use also a barplot that shows the proportion of loaners in each employment category. The majority of individuals in the sample belong to the "employed between 1 to 4 years" category, followed by the "employed for more or equal than 7 years" category. The categories "employed for less than a year" and "employed from 4 to 7 years" have roughly equal proportions. The "unemployed" category has the lowest percentage of loaners.
+
+```{r}
+bank %>% 
+    count(EMPLOYMENT) %>%
+    ungroup() %>%
+    mutate(EMPLOYMENT.pct = prop.table(n) * 100) %>%
+    ggplot(aes(x = EMPLOYMENT, y = EMPLOYMENT.pct, fill = EMPLOYMENT)) + ylim(0, 100) + geom_bar(stat = "identity",
+    position = "dodge") + geom_text(aes(y = EMPLOYMENT.pct + 2, label = paste0(round(EMPLOYMENT.pct,
+    2), "%")), position = position_dodge(width = 0.9), size = 3) + theme_classic() + xlab("Employement") + ylab("Proportion")
+```
+
+### Female Applicants ?
+
+Something strange appearing for some observations, is that we don't have any values in the 3 variables for male. We can see that in the following table:
+
+```{r}
+library(kableExtra)
+library(dplyr)
+
+bank_female <- bank %>% filter(bank[, 15] == 0 & bank[, 16] == 0 & bank[, 17] == 0)
+
+bank_female1 <- bank %>%
+  filter(bank[, 15] == 0 & bank[, 16] == 0 & bank[, 17] == 0) %>%
+  slice(1:10) %>%
+  select(OBS.,MALE_DIV, MALE_SINGLE, MALE_MAR_or_WID)
+
+femalehead <- kbl(bank_female1) %>%
+  kable_classic(full_width = FALSE, html_font = "Arial")
+
+femalehead
+
+```
+
+If our intuition is correct, it means that 310 applicants are women! We need to add a new variable to take this fact into account.
