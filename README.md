@@ -6,7 +6,7 @@ Final project for my __Projects in Data Analytics for Decision Making__ class.
 Credit risk assessment using various models in R (LR, RF, GLMNET, SVM, and more). The aim is to find the model that will correctly classify, with the highest probability, when a client is at risk of defaulting.
 
 ### Data
-The dataset used contains 1000 observations, each representing a client from the bank. It contains various information such as the amount requested, the job occupation of the applicant, its marital status, and more.
+The dataset used contains 1000 observations, each representing a client from the bank. It contains various information such as the amount requested, the job occupation of the applicant, his/her marital status, and more.
 
 
 ### How to run the project
